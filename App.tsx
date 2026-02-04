@@ -28,7 +28,8 @@ import {
   TrendingUp,
   TrendingDown,
   Target,
-  Flag
+  Flag,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -186,6 +187,21 @@ const App: React.FC = () => {
     };
   }, [transactions]);
 
+  // Forecast Totals
+  const forecastTotals = useMemo(() => {
+    const income = forecastedMovements
+      .filter(t => t.type === TransactionType.INCOME)
+      .reduce((acc, curr) => acc + curr.amount, 0);
+    const expenses = forecastedMovements
+      .filter(t => t.type === TransactionType.EXPENSE)
+      .reduce((acc, curr) => acc + curr.amount, 0);
+    return {
+      income,
+      expenses,
+      balance: income - expenses
+    };
+  }, [forecastedMovements]);
+
   // DRE Calculations (Filtered)
   const dreTotals = useMemo(() => {
     const filtered = selectedMonthDRE === 'all' 
@@ -342,6 +358,29 @@ const App: React.FC = () => {
 
   const deleteForecast = (id: string) => {
     if (window.confirm("Deseja remover esta previsão?")) {
+      setForecastedMovements(forecastedMovements.filter(f => f.id !== id));
+    }
+  };
+
+  const confirmForecast = (id: string) => {
+    const item = forecastedMovements.find(f => f.id === id);
+    if (!item) return;
+
+    if (window.confirm(`Confirmar a realização de "${item.description}"?\nIsso moverá o item para os lançamentos oficiais.`)) {
+      const catObj = categories.find(c => c.name === item.category);
+      
+      const transaction: Transaction = {
+        id: crypto.randomUUID(),
+        description: item.description,
+        amount: item.amount,
+        date: item.date,
+        type: item.type,
+        category: item.category,
+        group: catObj?.group || CategoryGroup.OPERATING_EXPENSE,
+        // Mantemos subCategory, clientId e projectId undefined pois não existem na previsão simplificada
+      };
+
+      setTransactions([transaction, ...transactions]);
       setForecastedMovements(forecastedMovements.filter(f => f.id !== id));
     }
   };
@@ -680,37 +719,67 @@ const App: React.FC = () => {
 
               {/* Long-term Forecast Panel */}
               <div className="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl border border-slate-100 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2">
                     <Clock size={18} className="text-[#79e34c]" />
-                    Compromissos Futuros Previstos
+                    Compromissos Futuros
                   </h3>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receitas</span>
+                  
+                  {/* Forecast Totals Summary */}
+                  {forecastedMovements.length > 0 && (
+                    <div className="flex flex-wrap gap-3 bg-slate-50 p-2 rounded-xl">
+                       <div className="px-3 py-1 rounded-lg border border-emerald-100 bg-white shadow-sm flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <div className="flex flex-col">
+                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Entradas</span>
+                             <span className="text-xs font-black text-emerald-600 tabular-nums leading-none">{formatCurrency(forecastTotals.income)}</span>
+                          </div>
+                       </div>
+                       <div className="px-3 py-1 rounded-lg border border-rose-100 bg-white shadow-sm flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          <div className="flex flex-col">
+                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Saídas</span>
+                             <span className="text-xs font-black text-rose-600 tabular-nums leading-none">{formatCurrency(forecastTotals.expenses)}</span>
+                          </div>
+                       </div>
+                       <div className="px-3 py-1 rounded-lg border border-slate-200 bg-slate-100 shadow-sm flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full ${forecastTotals.balance >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <div className="flex flex-col">
+                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Saldo</span>
+                             <span className={`text-xs font-black tabular-nums leading-none ${forecastTotals.balance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{formatCurrency(forecastTotals.balance)}</span>
+                          </div>
+                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-rose-500" />
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Despesas</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
                 
                 {forecastedMovements.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {forecastedMovements.map(f => (
-                      <div key={f.id} className={`p-4 bg-slate-50 border rounded-2xl transition-all group ${f.type === TransactionType.INCOME ? 'border-emerald-100 hover:border-emerald-300' : 'border-rose-100 hover:border-rose-300'}`}>
+                      <div key={f.id} className={`p-4 bg-slate-50 border rounded-2xl transition-all group relative ${f.type === TransactionType.INCOME ? 'border-emerald-100 hover:border-emerald-300' : 'border-rose-100 hover:border-rose-300'}`}>
                         <div className="flex justify-between items-start mb-2">
                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.date.split('-').reverse().join('/')}</span>
                           <div className="flex gap-2">
                             {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-rose-500" />}
-                            <button onClick={() => deleteForecast(f.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all">
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-2 bg-white/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100">
+                              <button 
+                                onClick={() => confirmForecast(f.id)} 
+                                title="Confirmar Realização"
+                                className="text-slate-300 hover:text-emerald-500 p-1 hover:bg-emerald-50 rounded-md transition-all"
+                              >
+                                <CheckCircle2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => deleteForecast(f.id)} 
+                                title="Excluir"
+                                className="text-slate-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded-md transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="font-bold text-slate-800 truncate mb-1">{f.description}</div>
+                        <div className="font-bold text-slate-800 truncate mb-1 pr-14" title={f.description}>{f.description}</div>
                         <div className="flex justify-between items-end">
                           <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{f.category}</span>
                           <span className={`font-black tabular-nums ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
