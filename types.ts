@@ -58,6 +58,15 @@ export interface Goal {
   deadline?: string;
 }
 
+export interface FinancialBox {
+  id: string;
+  name: string;
+  balance: number;
+  target?: number;
+  type: 'emergency' | 'investment' | 'savings';
+  color: string;
+}
+
 export interface MonthlyReport {
   month: string;
   revenue: number;

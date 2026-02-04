@@ -29,7 +29,12 @@ import {
   TrendingDown,
   Target,
   Flag,
-  CheckCircle2
+  CheckCircle2,
+  PiggyBank,
+  ShieldCheck,
+  Landmark,
+  Coins,
+  MinusCircle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -46,7 +51,7 @@ import {
 } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { Transaction, TransactionType, CategoryGroup, Client, Project, Category, ForecastedMovement, Goal } from './types';
+import { Transaction, TransactionType, CategoryGroup, Client, Project, Category, ForecastedMovement, Goal, FinancialBox } from './types';
 import { INITIAL_TRANSACTIONS, CATEGORIES as DEFAULT_CATEGORIES } from './constants';
 
 const App: React.FC = () => {
@@ -75,6 +80,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('vx-goals');
     return saved ? JSON.parse(saved) : [];
   });
+  const [financialBoxes, setFinancialBoxes] = useState<FinancialBox[]>(() => {
+    const saved = localStorage.getItem('vx-financial-boxes');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const [view, setView] = useState<'dashboard' | 'transactions' | 'reports' | 'clients' | 'projects' | 'history' | 'goals'>('dashboard');
   
@@ -86,8 +95,13 @@ const App: React.FC = () => {
   const [showForecastModal, setShowForecastModal] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showAddSubCategoryModal, setShowAddSubCategoryModal] = useState(false);
+  const [showBoxModal, setShowBoxModal] = useState(false);
+  const [showBoxOperationModal, setShowBoxOperationModal] = useState(false);
+  
   const [selectedMonthDRE, setSelectedMonthDRE] = useState<string>('all');
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [selectedBox, setSelectedBox] = useState<FinancialBox | null>(null);
+  const [boxOperationType, setBoxOperationType] = useState<'deposit' | 'withdraw'>('deposit');
   const [isExporting, setIsExporting] = useState(false);
 
   const dreRef = useRef<HTMLDivElement>(null);
@@ -117,6 +131,15 @@ const App: React.FC = () => {
     targetAmount: '',
     deadline: ''
   });
+
+  const [newBox, setNewBox] = useState({
+    name: '',
+    target: '',
+    type: 'savings' as 'savings' | 'investment' | 'emergency',
+    color: '#79e34c'
+  });
+
+  const [boxOperationAmount, setBoxOperationAmount] = useState('');
 
   // Handle window resize
   useEffect(() => {
@@ -158,7 +181,8 @@ const App: React.FC = () => {
     localStorage.setItem('vx-projects', JSON.stringify(projects));
     localStorage.setItem('vx-categories', JSON.stringify(categories));
     localStorage.setItem('vx-goals', JSON.stringify(goals));
-  }, [transactions, forecastedMovements, clients, projects, categories, goals]);
+    localStorage.setItem('vx-financial-boxes', JSON.stringify(financialBoxes));
+  }, [transactions, forecastedMovements, clients, projects, categories, goals, financialBoxes]);
 
   // Aggregated Monthly Data
   const monthlyData = useMemo(() => {
@@ -350,6 +374,54 @@ const App: React.FC = () => {
     setNewGoal({ name: '', targetAmount: '', deadline: '' });
   };
 
+  const handleAddBox = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetVal = newBox.target ? parseCurrencyString(newBox.target) : undefined;
+    
+    if (!newBox.name) return;
+
+    const box: FinancialBox = {
+      id: crypto.randomUUID(),
+      name: newBox.name,
+      balance: 0,
+      target: targetVal,
+      type: newBox.type,
+      color: newBox.color
+    };
+
+    setFinancialBoxes([...financialBoxes, box]);
+    setNewBox({ name: '', target: '', type: 'savings', color: '#79e34c' });
+    setShowBoxModal(false);
+  };
+
+  const handleBoxOperation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBox) return;
+
+    const val = parseCurrencyString(boxOperationAmount);
+    if (val === 0) return;
+
+    const updatedBoxes = financialBoxes.map(b => {
+      if (b.id === selectedBox.id) {
+        return {
+          ...b,
+          balance: boxOperationType === 'deposit' ? b.balance + val : Math.max(0, b.balance - val)
+        };
+      }
+      return b;
+    });
+
+    setFinancialBoxes(updatedBoxes);
+    setBoxOperationAmount('');
+    setShowBoxOperationModal(false);
+  };
+
+  const deleteBox = (id: string) => {
+    if (window.confirm("Tem certeza que deseja remover esta caixinha? O saldo não retornará automaticamente para o fluxo de caixa.")) {
+      setFinancialBoxes(financialBoxes.filter(b => b.id !== id));
+    }
+  };
+
   const deleteGoal = (id: string) => {
     if (window.confirm("Deseja remover esta meta?")) {
       setGoals(goals.filter(g => g.id !== id));
@@ -377,7 +449,6 @@ const App: React.FC = () => {
         type: item.type,
         category: item.category,
         group: catObj?.group || CategoryGroup.OPERATING_EXPENSE,
-        // Mantemos subCategory, clientId e projectId undefined pois não existem na previsão simplificada
       };
 
       setTransactions([transaction, ...transactions]);
@@ -480,12 +551,13 @@ const App: React.FC = () => {
       setProjects([]);
       setCategories(DEFAULT_CATEGORIES);
       setGoals([]);
+      setFinancialBoxes([]);
       localStorage.clear();
     }
   };
 
   const exportData = () => {
-    const data = { transactions, forecastedMovements, clients, projects, categories, goals };
+    const data = { transactions, forecastedMovements, clients, projects, categories, goals, financialBoxes };
     const dataStr = JSON.stringify(data, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     const exportFileDefaultName = `guifinance-backup-${new Date().toISOString().split('T')[0]}.json`;
@@ -516,6 +588,7 @@ const App: React.FC = () => {
           setProjects(data.projects || []);
           setCategories(data.categories || DEFAULT_CATEGORIES);
           setGoals(data.goals || []);
+          setFinancialBoxes(data.financialBoxes || []);
           alert("Backup restaurado com sucesso!");
         }
       } catch (err) {
@@ -715,6 +788,74 @@ const App: React.FC = () => {
                 <StatCard title="Entradas" value={formatCurrency(totals.income)} icon={<ArrowUpCircle className="text-emerald-500" />} color="bg-emerald-50" />
                 <StatCard title="Saídas" value={formatCurrency(totals.expenses)} icon={<ArrowDownCircle className="text-rose-500" />} color="bg-rose-50" />
                 <StatCard title="Saldo em Caixa" value={formatCurrency(totals.balance)} icon={<PieChart className="text-slate-900" />} color="bg-[#79e34c]" />
+              </div>
+
+              {/* Financial Boxes Section */}
+              <div className="mt-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <PiggyBank size={18} className="text-[#79e34c]" />
+                    Minhas Reservas
+                  </h3>
+                  <button onClick={() => setShowBoxModal(true)} className="text-[10px] font-black uppercase tracking-widest text-[#79e34c] hover:text-[#6bd63f] border border-[#79e34c] hover:border-[#6bd63f] px-3 py-1.5 rounded-lg transition-all">
+                    + Nova Caixinha
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                   {financialBoxes.length > 0 ? financialBoxes.map(box => {
+                     const boxIcon = 
+                        box.type === 'emergency' ? <ShieldCheck size={20} className="text-rose-500" /> : 
+                        box.type === 'investment' ? <TrendingUp size={20} className="text-indigo-500" /> : 
+                        <Landmark size={20} className="text-emerald-500" />;
+                     const progress = box.target ? Math.min((box.balance / box.target) * 100, 100) : 0;
+
+                     return (
+                       <div key={box.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative">
+                         <div className="flex justify-between items-start mb-3">
+                            <div className="bg-slate-50 p-2 rounded-xl">{boxIcon}</div>
+                            <button onClick={() => deleteBox(box.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-rose-500 p-1">
+                              <Trash2 size={16} />
+                            </button>
+                         </div>
+                         <h4 className="font-black text-slate-700 text-sm uppercase tracking-tight truncate mb-1">{box.name}</h4>
+                         <div className="text-xl font-black text-slate-900 tabular-nums tracking-tighter mb-4">{formatCurrency(box.balance)}</div>
+                         
+                         {box.target && (
+                           <div className="mb-4">
+                              <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                <span>Meta</span>
+                                <span>{progress.toFixed(0)}%</span>
+                              </div>
+                              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-[#79e34c] rounded-full" style={{ width: `${progress}%` }} />
+                              </div>
+                           </div>
+                         )}
+
+                         <div className="flex gap-2 mt-auto">
+                            <button 
+                              onClick={() => { setSelectedBox(box); setBoxOperationType('deposit'); setShowBoxOperationModal(true); }}
+                              className="flex-1 flex items-center justify-center gap-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors text-xs font-bold"
+                            >
+                              <PlusCircle size={14} /> Depositar
+                            </button>
+                            <button 
+                              onClick={() => { setSelectedBox(box); setBoxOperationType('withdraw'); setShowBoxOperationModal(true); }}
+                              className="flex-1 flex items-center justify-center gap-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition-colors text-xs font-bold"
+                            >
+                              <MinusCircle size={14} /> Sacar
+                            </button>
+                         </div>
+                       </div>
+                     );
+                   }) : (
+                     <div className="col-span-full py-8 flex flex-col items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <Coins size={32} className="text-slate-300 mb-2" />
+                        <p className="text-xs font-bold text-slate-400">Nenhuma reserva criada</p>
+                     </div>
+                   )}
+                </div>
               </div>
 
               {/* Long-term Forecast Panel */}
@@ -1382,6 +1523,67 @@ const App: React.FC = () => {
               </div>
               <button type="submit" className="w-full bg-slate-800 hover:bg-black text-white font-black py-4 lg:py-5 rounded-xl lg:rounded-3xl shadow-xl transition-all transform active:scale-95 uppercase tracking-widest text-xs lg:text-sm">
                 Salvar Previsão
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Box Modal */}
+      {showBoxModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-2xl lg:rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100">
+            <div className="p-5 lg:p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+              <h3 className="font-black text-slate-800 uppercase tracking-tight text-xs lg:text-sm">Nova Reserva</h3>
+              <button onClick={() => setShowBoxModal(false)} className="text-slate-400 hover:text-slate-800">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleAddBox} className="p-6 lg:p-8 space-y-4">
+              <div>
+                <label className="block text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Nome da Caixinha</label>
+                <input autoFocus required type="text" value={newBox.name} onChange={e => setNewBox({...newBox, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#79e34c] transition-all text-sm" placeholder="Ex: Viagem, Emergência..." />
+              </div>
+              <div>
+                <label className="block text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Meta (Opcional)</label>
+                <input type="text" inputMode="numeric" value={newBox.target} onChange={e => setNewBox({...newBox, target: maskCurrency(e.target.value, TransactionType.INCOME)})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#79e34c] transition-all text-sm" placeholder="R$ 0,00" />
+              </div>
+              <div>
+                <label className="block text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Tipo</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => setNewBox({...newBox, type: 'savings'})} className={`p-2 rounded-xl text-xs font-bold border transition-all ${newBox.type === 'savings' ? 'bg-[#79e34c]/20 border-[#79e34c] text-slate-900' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>Objetivo</button>
+                  <button type="button" onClick={() => setNewBox({...newBox, type: 'emergency'})} className={`p-2 rounded-xl text-xs font-bold border transition-all ${newBox.type === 'emergency' ? 'bg-rose-50 border-rose-500 text-rose-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>Emergência</button>
+                  <button type="button" onClick={() => setNewBox({...newBox, type: 'investment'})} className={`p-2 rounded-xl text-xs font-bold border transition-all ${newBox.type === 'investment' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>Investimento</button>
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-[#79e34c] text-slate-900 font-black py-4 rounded-xl shadow-lg shadow-[#79e34c]/10 hover:scale-[1.02] transition-all uppercase text-[10px] tracking-widest">
+                Criar Caixinha
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Box Operation Modal */}
+      {showBoxOperationModal && selectedBox && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-2xl lg:rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100">
+            <div className="p-5 lg:p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="font-black text-slate-800 uppercase tracking-tight text-xs lg:text-sm">{boxOperationType === 'deposit' ? 'Guardar Dinheiro' : 'Resgatar Dinheiro'}</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{selectedBox.name}</p>
+              </div>
+              <button onClick={() => setShowBoxOperationModal(false)} className="text-slate-400 hover:text-slate-800">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleBoxOperation} className="p-6 lg:p-8 space-y-4">
+              <div>
+                <label className="block text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Valor</label>
+                <input autoFocus required type="text" inputMode="numeric" value={boxOperationAmount} onChange={e => setBoxOperationAmount(maskCurrency(e.target.value, TransactionType.INCOME))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-[#79e34c] transition-all text-xl font-black text-slate-800" placeholder="R$ 0,00" />
+              </div>
+              <button type="submit" className={`w-full font-black py-4 rounded-xl shadow-lg hover:scale-[1.02] transition-all uppercase text-[10px] tracking-widest ${boxOperationType === 'deposit' ? 'bg-[#79e34c] text-slate-900 shadow-[#79e34c]/10' : 'bg-slate-800 text-white'}`}>
+                Confirmar {boxOperationType === 'deposit' ? 'Depósito' : 'Resgate'}
               </button>
             </form>
           </div>
