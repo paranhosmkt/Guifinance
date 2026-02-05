@@ -35,7 +35,11 @@ import {
   Landmark,
   Coins,
   MinusCircle,
-  Copy
+  Copy,
+  List,
+  Maximize2,
+  Minimize2,
+  Filter
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -103,6 +107,9 @@ const App: React.FC = () => {
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [selectedBox, setSelectedBox] = useState<FinancialBox | null>(null);
   const [boxOperationType, setBoxOperationType] = useState<'deposit' | 'withdraw'>('deposit');
+  const [forecastViewMode, setForecastViewMode] = useState<'list' | 'chart'>('list');
+  const [forecastFilter, setForecastFilter] = useState<'all' | 'INCOME' | 'EXPENSE'>('all');
+  const [isForecastMinimal, setIsForecastMinimal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const dreRef = useRef<HTMLDivElement>(null);
@@ -212,20 +219,42 @@ const App: React.FC = () => {
     };
   }, [transactions]);
 
-  // Forecast Totals
-  const forecastTotals = useMemo(() => {
-    const income = forecastedMovements
-      .filter(t => t.type === TransactionType.INCOME)
-      .reduce((acc, curr) => acc + curr.amount, 0);
-    const expenses = forecastedMovements
-      .filter(t => t.type === TransactionType.EXPENSE)
-      .reduce((acc, curr) => acc + curr.amount, 0);
+  // Filtered Forecasts
+  const filteredForecasts = useMemo(() => {
+    return forecastedMovements.filter(f => forecastFilter === 'all' ? true : f.type === forecastFilter);
+  }, [forecastedMovements, forecastFilter]);
+
+  // Forecast Totals & Chart Data
+  const { forecastTotals, forecastChartData } = useMemo(() => {
+    let income = 0;
+    let expenses = 0;
+    
+    // Group by month for the chart
+    const grouped = filteredForecasts.reduce((acc: any, curr) => {
+      const monthKey = curr.date.substring(0, 7); // YYYY-MM
+      if (!acc[monthKey]) acc[monthKey] = { date: monthKey, income: 0, expense: 0 };
+      
+      if (curr.type === TransactionType.INCOME) {
+        income += curr.amount;
+        acc[monthKey].income += curr.amount;
+      } else {
+        expenses += curr.amount;
+        acc[monthKey].expense += curr.amount;
+      }
+      return acc;
+    }, {});
+
+    const chartData = Object.values(grouped).sort((a: any, b: any) => a.date.localeCompare(b.date));
+
     return {
-      income,
-      expenses,
-      balance: income - expenses
+      forecastTotals: {
+        income,
+        expenses,
+        balance: income - expenses
+      },
+      forecastChartData: chartData
     };
-  }, [forecastedMovements]);
+  }, [filteredForecasts]);
 
   // DRE Calculations (Filtered)
   const dreTotals = useMemo(() => {
@@ -876,86 +905,180 @@ const App: React.FC = () => {
               {/* Long-term Forecast Panel */}
               <div className="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl border border-slate-100 shadow-sm">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Clock size={18} className="text-[#79e34c]" />
-                    Compromissos Futuros
-                  </h3>
-                  
-                  {/* Forecast Totals Summary */}
-                  {forecastedMovements.length > 0 && (
-                    <div className="flex flex-wrap gap-3 bg-slate-50 p-2 rounded-xl">
-                       <div className="px-3 py-1 rounded-lg border border-emerald-100 bg-white shadow-sm flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          <div className="flex flex-col">
-                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Entradas</span>
-                             <span className="text-xs font-black text-emerald-600 tabular-nums leading-none">{formatCurrency(forecastTotals.income)}</span>
-                          </div>
-                       </div>
-                       <div className="px-3 py-1 rounded-lg border border-rose-100 bg-white shadow-sm flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                          <div className="flex flex-col">
-                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Saídas</span>
-                             <span className="text-xs font-black text-rose-600 tabular-nums leading-none">{formatCurrency(forecastTotals.expenses)}</span>
-                          </div>
-                       </div>
-                       <div className="px-3 py-1 rounded-lg border border-slate-200 bg-slate-100 shadow-sm flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${forecastTotals.balance >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <div className="flex flex-col">
-                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Saldo</span>
-                             <span className={`text-xs font-black tabular-nums leading-none ${forecastTotals.balance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{formatCurrency(forecastTotals.balance)}</span>
-                          </div>
-                       </div>
+                  <div className="flex items-center gap-4">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <Clock size={18} className="text-[#79e34c]" />
+                      Compromissos Futuros
+                    </h3>
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                      <button 
+                        onClick={() => setForecastFilter('all')}
+                        className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${forecastFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        Todos
+                      </button>
+                      <button 
+                        onClick={() => setForecastFilter(TransactionType.INCOME)}
+                        className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${forecastFilter === TransactionType.INCOME ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        Entradas
+                      </button>
+                      <button 
+                        onClick={() => setForecastFilter(TransactionType.EXPENSE)}
+                        className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${forecastFilter === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        Saídas
+                      </button>
                     </div>
-                  )}
+                  </div>
+                  
+                  <div className="flex gap-2 items-center">
+                    {/* Forecast Totals Summary */}
+                    {filteredForecasts.length > 0 && (
+                      <div className="hidden xl:flex flex-wrap gap-3 bg-slate-50 p-2 rounded-xl mr-2">
+                         <div className="px-3 py-1 rounded-lg border border-emerald-100 bg-white shadow-sm flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <div className="flex flex-col">
+                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Entradas</span>
+                               <span className="text-xs font-black text-emerald-600 tabular-nums leading-none">{formatCurrency(forecastTotals.income)}</span>
+                            </div>
+                         </div>
+                         <div className="px-3 py-1 rounded-lg border border-rose-100 bg-white shadow-sm flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            <div className="flex flex-col">
+                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Prev. Saídas</span>
+                               <span className="text-xs font-black text-rose-600 tabular-nums leading-none">{formatCurrency(forecastTotals.expenses)}</span>
+                            </div>
+                         </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                      <button 
+                        onClick={() => setForecastViewMode('list')}
+                        title="Visualização em Lista"
+                        className={`p-2 rounded-lg transition-all ${forecastViewMode === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <List size={16} />
+                      </button>
+                      <button 
+                        onClick={() => setForecastViewMode('chart')}
+                        title="Visualização em Gráfico"
+                        className={`p-2 rounded-lg transition-all ${forecastViewMode === 'chart' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <BarChart3 size={16} />
+                      </button>
+                      <div className="w-px h-6 bg-slate-200 mx-1 self-center" />
+                      <button 
+                        onClick={() => setIsForecastMinimal(!isForecastMinimal)}
+                        title={isForecastMinimal ? "Expandir Detalhes" : "Modo Minimalista"}
+                        className={`p-2 rounded-lg transition-all ${isForecastMinimal ? 'bg-white shadow-sm text-[#79e34c]' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {isForecastMinimal ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 
-                {forecastedMovements.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {forecastedMovements.map(f => (
-                      <div key={f.id} className={`p-4 bg-slate-50 border rounded-2xl transition-all group relative ${f.type === TransactionType.INCOME ? 'border-emerald-100 hover:border-emerald-300' : 'border-rose-100 hover:border-rose-300'}`}>
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.date.split('-').reverse().join('/')}</span>
-                          <div className="flex gap-2">
-                            {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-rose-500" />}
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-2 bg-white/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100">
-                              <button 
-                                onClick={() => confirmForecast(f.id)} 
-                                title="Confirmar Realização"
-                                className="text-slate-300 hover:text-emerald-500 p-1 hover:bg-emerald-50 rounded-md transition-all"
-                              >
-                                <CheckCircle2 size={16} />
-                              </button>
-                              <button 
-                                onClick={() => handleDuplicateForecast(f.id)} 
-                                title="Duplicar"
-                                className="text-slate-300 hover:text-blue-500 p-1 hover:bg-blue-50 rounded-md transition-all"
-                              >
-                                <Copy size={16} />
-                              </button>
-                              <button 
-                                onClick={() => deleteForecast(f.id)} 
-                                title="Excluir"
-                                className="text-slate-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded-md transition-all"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
+                {filteredForecasts.length > 0 ? (
+                  <>
+                    {forecastViewMode === 'list' ? (
+                      <div className={`grid gap-4 ${isForecastMinimal ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+                        {filteredForecasts.map(f => (
+                          <div key={f.id} className={`bg-slate-50 border rounded-2xl transition-all group relative ${isForecastMinimal ? 'px-4 py-3 flex items-center justify-between hover:bg-white hover:shadow-sm' : 'p-4'} ${f.type === TransactionType.INCOME ? 'border-emerald-100 hover:border-emerald-300' : 'border-rose-100 hover:border-rose-300'}`}>
+                            {isForecastMinimal ? (
+                              <>
+                                <div className="flex items-center gap-4 flex-1">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter w-14">{f.date.split('-').reverse().slice(0, 2).join('/')}</span>
+                                  <div className="flex items-center gap-2 flex-1">
+                                    {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500 flex-shrink-0" /> : <TrendingDown size={14} className="text-rose-500 flex-shrink-0" />}
+                                    <span className="font-bold text-slate-800 text-sm truncate" title={f.description}>{f.description}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <span className={`font-black tabular-nums text-sm ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
+                                  </span>
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => confirmForecast(f.id)} className="text-slate-300 hover:text-emerald-500 p-1"><CheckCircle2 size={14} /></button>
+                                    <button onClick={() => handleDuplicateForecast(f.id)} className="text-slate-300 hover:text-blue-500 p-1"><Copy size={14} /></button>
+                                    <button onClick={() => deleteForecast(f.id)} className="text-slate-300 hover:text-rose-500 p-1"><Trash2 size={14} /></button>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex justify-between items-start mb-2">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.date.split('-').reverse().join('/')}</span>
+                                  <div className="flex gap-2">
+                                    {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-rose-500" />}
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-2 bg-white/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 z-10">
+                                      <button 
+                                        onClick={() => confirmForecast(f.id)} 
+                                        title="Confirmar Realização"
+                                        className="text-slate-300 hover:text-emerald-500 p-1 hover:bg-emerald-50 rounded-md transition-all"
+                                      >
+                                        <CheckCircle2 size={16} />
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDuplicateForecast(f.id)} 
+                                        title="Duplicar"
+                                        className="text-slate-300 hover:text-blue-500 p-1 hover:bg-blue-50 rounded-md transition-all"
+                                      >
+                                        <Copy size={16} />
+                                      </button>
+                                      <button 
+                                        onClick={() => deleteForecast(f.id)} 
+                                        title="Excluir"
+                                        className="text-slate-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded-md transition-all"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="font-bold text-slate-800 truncate mb-1 pr-14" title={f.description}>{f.description}</div>
+                                <div className="flex justify-between items-end">
+                                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{f.category}</span>
+                                  <span className={`font-black tabular-nums ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </div>
-                        </div>
-                        <div className="font-bold text-slate-800 truncate mb-1 pr-14" title={f.description}>{f.description}</div>
-                        <div className="flex justify-between items-end">
-                          <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{f.category}</span>
-                          <span className={`font-black tabular-nums ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
-                          </span>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    ) : (
+                      <div className="h-72 w-full animate-in fade-in duration-300">
+                         <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={forecastChartData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis 
+                                dataKey="date" 
+                                stroke="#94a3b8" 
+                                fontSize={10} 
+                                tickLine={false} 
+                                axisLine={false}
+                                tickFormatter={(val) => formatMonth(val)}
+                              />
+                              <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val/1000}k`} />
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }} 
+                                formatter={(val: any) => formatCurrency(Number(val) || 0)} 
+                              />
+                              <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Receita Prevista" />
+                              <Bar dataKey="expense" fill="#f43f5e" radius={[4, 4, 0, 0]} name="Despesa Prevista" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="py-12 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
                     <AlertCircle size={24} className="mb-2 opacity-50" />
                     <p className="text-sm font-medium">Nenhum movimento previsto para o futuro.</p>
+                    {forecastFilter !== 'all' && <p className="text-xs mt-1 text-slate-400">Tente alterar o filtro de visualização.</p>}
                     <button onClick={() => setShowForecastModal(true)} className="mt-3 text-xs font-black text-[#79e34c] uppercase hover:underline">Adicionar Previsão</button>
                   </div>
                 )}
