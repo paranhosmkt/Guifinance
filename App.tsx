@@ -39,7 +39,8 @@ import {
   List,
   Maximize2,
   Minimize2,
-  Filter
+  Filter,
+  Link
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -137,7 +138,8 @@ const App: React.FC = () => {
   const [newGoal, setNewGoal] = useState({
     name: '',
     targetAmount: '',
-    deadline: ''
+    deadline: '',
+    linkedBoxId: ''
   });
 
   const [newBox, setNewBox] = useState({
@@ -411,11 +413,12 @@ const App: React.FC = () => {
       id: crypto.randomUUID(),
       name: newGoal.name,
       targetAmount: target,
-      deadline: newGoal.deadline || undefined
+      deadline: newGoal.deadline || undefined,
+      linkedBoxId: newGoal.linkedBoxId || undefined
     };
 
     setGoals([...goals, goal]);
-    setNewGoal({ name: '', targetAmount: '', deadline: '' });
+    setNewGoal({ name: '', targetAmount: '', deadline: '', linkedBoxId: '' });
   };
 
   const handleAddBox = (e: React.FormEvent) => {
@@ -1179,6 +1182,19 @@ const App: React.FC = () => {
                          className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-[#79e34c] transition-all text-sm font-bold" 
                        />
                      </div>
+                     <div>
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Vincular a Reserva (Opcional)</label>
+                       <select 
+                         value={newGoal.linkedBoxId} 
+                         onChange={e => setNewGoal({...newGoal, linkedBoxId: e.target.value})} 
+                         className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-[#79e34c] transition-all text-sm font-bold"
+                       >
+                         <option value="">Nenhuma (Usar Saldo Geral)</option>
+                         {financialBoxes.map(box => (
+                           <option key={box.id} value={box.id}>{box.name} - {formatCurrency(box.balance)}</option>
+                         ))}
+                       </select>
+                     </div>
                      <button type="submit" className="w-full bg-slate-800 text-white font-black py-4 rounded-xl lg:rounded-2xl hover:bg-black transition-all shadow-lg text-xs uppercase tracking-widest">
                        Criar Meta Financeira
                      </button>
@@ -1188,20 +1204,31 @@ const App: React.FC = () => {
 
                <div className="lg:col-span-2 space-y-4 lg:space-y-6">
                  {goals.length > 0 ? goals.map(goal => {
-                   const progress = Math.min((totals.balance / goal.targetAmount) * 100, 100);
-                   const missing = Math.max(goal.targetAmount - totals.balance, 0);
-                   const isCompleted = totals.balance >= goal.targetAmount;
+                   // Calculate progress based on linked box or general balance
+                   const linkedBox = goal.linkedBoxId ? financialBoxes.find(b => b.id === goal.linkedBoxId) : null;
+                   const currentBalance = linkedBox ? linkedBox.balance : totals.balance;
+                   
+                   const progress = Math.min((currentBalance / goal.targetAmount) * 100, 100);
+                   const missing = Math.max(goal.targetAmount - currentBalance, 0);
+                   const isCompleted = currentBalance >= goal.targetAmount;
 
                    return (
                      <div key={goal.id} className="bg-white p-6 lg:p-8 rounded-2xl lg:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group">
                        <div className="flex justify-between items-start mb-6">
                          <div>
                             <h4 className="font-black text-slate-800 text-xl lg:text-2xl tracking-tighter uppercase leading-none mb-1">{goal.name}</h4>
-                            {goal.deadline && (
-                              <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                <Calendar size={12} /> Prazo: {goal.deadline.split('-').reverse().join('/')}
-                              </div>
-                            )}
+                            <div className="flex flex-col gap-1">
+                              {goal.deadline && (
+                                <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  <Calendar size={12} /> Prazo: {goal.deadline.split('-').reverse().join('/')}
+                                </div>
+                              )}
+                              {linkedBox && (
+                                <div className="flex items-center gap-1.5 text-[10px] font-black text-[#79e34c] uppercase tracking-widest mt-1">
+                                  <Link size={12} /> Vinculado a: {linkedBox.name}
+                                </div>
+                              )}
+                            </div>
                          </div>
                          <button onClick={() => deleteGoal(goal.id)} className="text-slate-300 hover:text-rose-500 p-2 hover:bg-rose-50 rounded-xl transition-all">
                            <Trash2 size={20} />
@@ -1214,8 +1241,8 @@ const App: React.FC = () => {
                              <span className="text-lg font-black text-slate-800 tabular-nums">{formatCurrency(goal.targetAmount)}</span>
                           </div>
                           <div>
-                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Saldo Atual</span>
-                             <span className="text-lg font-black text-emerald-600 tabular-nums">{formatCurrency(totals.balance)}</span>
+                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Saldo {linkedBox ? 'da Reserva' : 'Atual'}</span>
+                             <span className="text-lg font-black text-emerald-600 tabular-nums">{formatCurrency(currentBalance)}</span>
                           </div>
                           <div>
                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Falta para Alcançar</span>

@@ -56,6 +56,7 @@ export interface Goal {
   name: string;
   targetAmount: number;
   deadline?: string;
+  linkedBoxId?: string;
 }
 
 export interface FinancialBox {
