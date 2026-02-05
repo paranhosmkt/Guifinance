@@ -40,7 +40,9 @@ import {
   Maximize2,
   Minimize2,
   Filter,
-  Link
+  Link,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -111,6 +113,7 @@ const App: React.FC = () => {
   const [forecastViewMode, setForecastViewMode] = useState<'list' | 'chart'>('list');
   const [forecastFilter, setForecastFilter] = useState<'all' | 'INCOME' | 'EXPENSE'>('all');
   const [isForecastMinimal, setIsForecastMinimal] = useState(false);
+  const [showAllForecasts, setShowAllForecasts] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const dreRef = useRef<HTMLDivElement>(null);
@@ -177,6 +180,11 @@ const App: React.FC = () => {
       setNewForecast(prev => ({ ...prev, category: categories[0].name }));
     }
   }, [categories, newTx.category, newForecast.category]);
+
+  // Reset showAllForecasts when filter changes
+  useEffect(() => {
+    setShowAllForecasts(false);
+  }, [forecastFilter]);
 
   const [newClientName, setNewClientName] = useState('');
   const [newProject, setNewProject] = useState({ name: '', clientId: '' });
@@ -986,72 +994,92 @@ const App: React.FC = () => {
                 {filteredForecasts.length > 0 ? (
                   <>
                     {forecastViewMode === 'list' ? (
-                      <div className={`grid gap-4 ${isForecastMinimal ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
-                        {filteredForecasts.map(f => (
-                          <div key={f.id} className={`bg-slate-50 border rounded-2xl transition-all group relative ${isForecastMinimal ? 'px-4 py-3 flex items-center justify-between hover:bg-white hover:shadow-sm' : 'p-4'} ${f.type === TransactionType.INCOME ? 'border-emerald-100 hover:border-emerald-300' : 'border-rose-100 hover:border-rose-300'}`}>
-                            {isForecastMinimal ? (
-                              <>
-                                <div className="flex items-center gap-4 flex-1">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter w-14">{f.date.split('-').reverse().slice(0, 2).join('/')}</span>
-                                  <div className="flex items-center gap-2 flex-1">
-                                    {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500 flex-shrink-0" /> : <TrendingDown size={14} className="text-rose-500 flex-shrink-0" />}
-                                    <span className="font-bold text-slate-800 text-sm truncate" title={f.description}>{f.description}</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <span className={`font-black tabular-nums text-sm ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
-                                  </span>
-                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => confirmForecast(f.id)} className="text-slate-300 hover:text-emerald-500 p-1"><CheckCircle2 size={14} /></button>
-                                    <button onClick={() => handleDuplicateForecast(f.id)} className="text-slate-300 hover:text-blue-500 p-1"><Copy size={14} /></button>
-                                    <button onClick={() => deleteForecast(f.id)} className="text-slate-300 hover:text-rose-500 p-1"><Trash2 size={14} /></button>
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="flex justify-between items-start mb-2">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.date.split('-').reverse().join('/')}</span>
-                                  <div className="flex gap-2">
-                                    {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-rose-500" />}
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-2 bg-white/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 z-10">
-                                      <button 
-                                        onClick={() => confirmForecast(f.id)} 
-                                        title="Confirmar Realização"
-                                        className="text-slate-300 hover:text-emerald-500 p-1 hover:bg-emerald-50 rounded-md transition-all"
-                                      >
-                                        <CheckCircle2 size={16} />
-                                      </button>
-                                      <button 
-                                        onClick={() => handleDuplicateForecast(f.id)} 
-                                        title="Duplicar"
-                                        className="text-slate-300 hover:text-blue-500 p-1 hover:bg-blue-50 rounded-md transition-all"
-                                      >
-                                        <Copy size={16} />
-                                      </button>
-                                      <button 
-                                        onClick={() => deleteForecast(f.id)} 
-                                        title="Excluir"
-                                        className="text-slate-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded-md transition-all"
-                                      >
-                                        <Trash2 size={16} />
-                                      </button>
+                      <>
+                        <div className={`grid gap-4 ${isForecastMinimal ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+                          {(showAllForecasts ? filteredForecasts : filteredForecasts.slice(0, 12)).map(f => (
+                            <div key={f.id} className={`bg-slate-50 border rounded-2xl transition-all group relative ${isForecastMinimal ? 'px-4 py-3 flex items-center justify-between hover:bg-white hover:shadow-sm' : 'p-4'} ${f.type === TransactionType.INCOME ? 'border-emerald-100 hover:border-emerald-300' : 'border-rose-100 hover:border-rose-300'}`}>
+                              {isForecastMinimal ? (
+                                <>
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter w-14">{f.date.split('-').reverse().slice(0, 2).join('/')}</span>
+                                    <div className="flex items-center gap-2 flex-1">
+                                      {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500 flex-shrink-0" /> : <TrendingDown size={14} className="text-rose-500 flex-shrink-0" />}
+                                      <span className="font-bold text-slate-800 text-sm truncate" title={f.description}>{f.description}</span>
                                     </div>
                                   </div>
-                                </div>
-                                <div className="font-bold text-slate-800 truncate mb-1 pr-14" title={f.description}>{f.description}</div>
-                                <div className="flex justify-between items-end">
-                                  <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{f.category}</span>
-                                  <span className={`font-black tabular-nums ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
-                                  </span>
-                                </div>
-                              </>
-                            )}
+                                  <div className="flex items-center gap-4">
+                                    <span className={`font-black tabular-nums text-sm ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
+                                    </span>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button onClick={() => confirmForecast(f.id)} className="text-slate-300 hover:text-emerald-500 p-1"><CheckCircle2 size={14} /></button>
+                                      <button onClick={() => handleDuplicateForecast(f.id)} className="text-slate-300 hover:text-blue-500 p-1"><Copy size={14} /></button>
+                                      <button onClick={() => deleteForecast(f.id)} className="text-slate-300 hover:text-rose-500 p-1"><Trash2 size={14} /></button>
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex justify-between items-start mb-2">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{f.date.split('-').reverse().join('/')}</span>
+                                    <div className="flex gap-2">
+                                      {f.type === TransactionType.INCOME ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-rose-500" />}
+                                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all absolute right-2 top-2 bg-white/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border border-slate-100 z-10">
+                                        <button 
+                                          onClick={() => confirmForecast(f.id)} 
+                                          title="Confirmar Realização"
+                                          className="text-slate-300 hover:text-emerald-500 p-1 hover:bg-emerald-50 rounded-md transition-all"
+                                        >
+                                          <CheckCircle2 size={16} />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDuplicateForecast(f.id)} 
+                                          title="Duplicar"
+                                          className="text-slate-300 hover:text-blue-500 p-1 hover:bg-blue-50 rounded-md transition-all"
+                                        >
+                                          <Copy size={16} />
+                                        </button>
+                                        <button 
+                                          onClick={() => deleteForecast(f.id)} 
+                                          title="Excluir"
+                                          className="text-slate-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded-md transition-all"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="font-bold text-slate-800 truncate mb-1 pr-14" title={f.description}>{f.description}</div>
+                                  <div className="flex justify-between items-end">
+                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{f.category}</span>
+                                    <span className={`font-black tabular-nums ${f.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {f.type === TransactionType.INCOME ? '+' : '-'} {formatCurrency(f.amount)}
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {filteredForecasts.length > 12 && (
+                          <div className="mt-4 flex justify-center">
+                            <button 
+                              onClick={() => setShowAllForecasts(!showAllForecasts)}
+                              className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#79e34c] transition-colors uppercase tracking-widest bg-slate-50 hover:bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm"
+                            >
+                              {showAllForecasts ? (
+                                <>
+                                  <ChevronUp size={16} /> Ver Menos
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown size={16} /> Ver Todos ({filteredForecasts.length - 12} restantes)
+                                </>
+                              )}
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        )}
+                      </>
                     ) : (
                       <div className="h-72 w-full animate-in fade-in duration-300">
                          <ResponsiveContainer width="100%" height="100%">
