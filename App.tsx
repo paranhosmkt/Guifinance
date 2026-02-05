@@ -34,7 +34,8 @@ import {
   ShieldCheck,
   Landmark,
   Coins,
-  MinusCircle
+  MinusCircle,
+  Copy
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -356,6 +357,20 @@ const App: React.FC = () => {
     setForecastedMovements([...forecastedMovements, forecast].sort((a, b) => a.date.localeCompare(b.date)));
     setNewForecast({ description: '', amount: '', date: '', category: categories[0]?.name || '', type: TransactionType.EXPENSE });
     setShowForecastModal(false);
+  };
+
+  const handleDuplicateForecast = (id: string) => {
+    const item = forecastedMovements.find(f => f.id === id);
+    if (!item) return;
+
+    setNewForecast({
+      description: `${item.description} (Cópia)`,
+      amount: maskCurrency(Math.round(item.amount * 100), item.type),
+      date: item.date,
+      category: item.category,
+      type: item.type
+    });
+    setShowForecastModal(true);
   };
 
   const handleAddGoal = (e: React.FormEvent) => {
@@ -909,6 +924,13 @@ const App: React.FC = () => {
                                 className="text-slate-300 hover:text-emerald-500 p-1 hover:bg-emerald-50 rounded-md transition-all"
                               >
                                 <CheckCircle2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => handleDuplicateForecast(f.id)} 
+                                title="Duplicar"
+                                className="text-slate-300 hover:text-blue-500 p-1 hover:bg-blue-50 rounded-md transition-all"
+                              >
+                                <Copy size={16} />
                               </button>
                               <button 
                                 onClick={() => deleteForecast(f.id)} 
